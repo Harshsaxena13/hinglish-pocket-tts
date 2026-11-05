@@ -1,0 +1,62 @@
+# Stage 1 -- fine-tune the released 24-layer English teacher on Hinglish.
+#
+# Rendered by hinglish_tts.train_runner: ${POCKET_TTS} is the pinned pocket-tts
+# checkout, ${DATA} the prepared corpus, ${RUNS} the run root.
+#
+# Why these choices (2x T4, ~6 h, ~100 h of data):
+# * english_2026-09_24l is the teacher that the released 6-layer english_2026-09
+#   was distilled from, so stage 2 can start the student from that student.
+# * The English tokenizer is kept: romanized Hindi is Latin script, so every
+#   token already has an embedding, and English words keep their pronunciation
+#   (code-switching for free). Only the reading of the tokens has to shift.
+# * freeze_head keeps the sampler head (and its latent geometry) that the
+#   released student was trained against; only the backbone adapts.
+# * lr 1e-4: 5x Kyutai's same-language fine-tune rate, because Hindi phonology
+#   on Latin tokens is a bigger shift than new English voices; constant, since
+#   the run is stopped by wall clock and EMA weights are exported.
+# * batch 8 x accum 4 x 2 GPUs = 64 rows per step, Kyutai's effective batch.
+model_config: ${POCKET_TTS}/pocket_tts/config/english_2026-09_24l.yaml
+start_from_pretrained: true
+freeze_head: true
+
+data:
+  train_jsonl: ${DATA}/manifests/train_aligned.jsonl
+  valid_jsonl: ${DATA}/manifests/valid_aligned.jsonl
+  max_duration_sec: 15.0   # = max_sec in data_recipe.yaml, so targets are never cropped
+  max_voice_prompt_sec: 5.0
+  loader_procs: 2          # Kaggle gives 4 vCPUs to share between 2 ranks
+  num_bucket_batches: 4
+
+flow:
+  type: lsd
+  kwargs: {}
+
+flow_batch_multiplier: 2   # 4 upstream; halves the head's cost, the head is frozen anyway
+eos_loss_weight: 0.1
+text_dropout: 0.2          # CFG dropout: the teacher is sampled with guidance
+voice_dropout: 0.2
+stats_ema_steps: 0         # keep the released latent statistics (the student shares them)
+
+optim:
+  lr: 1.0e-4
+  schedule: constant
+  warmup_steps: 500
+
+run_dir: ${RUNS}/teacher
+batch_size: 8
+grad_accum_steps: 4
+max_steps: 60000           # upper bound; the runner stops the run at its time budget
+compile: false             # ~10 min of compilation does not pay off on short T4 runs
+ema_decay: 0.999
+log_freq: 25
+valid_freq: 1000
+num_valid_batches: 15
+ckpt_freq: 1000
+num_ckpt_keep: 1           # /kaggle/working holds 20 GB; one 24-layer checkpoint is ~5 GB
+sample_freq: 1000
+sample_temp: 0.3
+sample_cfg_coef: 2.0
+sample_sentences:
+  - "Namaste! Aaj ka mausam bahut accha hai, chalo bahar chalte hain."
+  - "Mera laptop hang ho gaya, isliye main meeting thodi der se join karunga."
+  - "Kya aap mujhe bata sakte hain ki nearest metro station kahan hai?"

@@ -1,0 +1,93 @@
+# Training-data recipe for Hinglish Pocket TTS.
+#
+# Every source is a Hugging Face parquet dataset. Shards are downloaded one at a
+# time into the scratch dir, filtered, decoded, resampled to 24 kHz mono FLAC and
+# deleted, so peak disk use is ~3 shards + the output audio (~1 GB per 10 h).
+#
+# Per-source knobs:
+#   files          glob of parquet files inside the repo
+#   max_shards     use at most this many shards (picked at random, seeded)
+#   max_hours      hour budget for the source, split evenly over its shards
+#   sample_frac    keep each row with this probability (spreads the budget over a
+#                  shard when it has no duration column to plan with)
+#   text           candidate transcript columns, first non-empty wins
+#   speaker/gender columns (ClassLabel ints are decoded via the parquet metadata)
+#   filters        {column: [op, value]} on metadata columns, rows with nulls pass
+#   min_sec/max_sec  per-source override of the global duration window
+#   optional       skip quietly when the repo is gated / unreachable
+#
+# Licenses: verify each dataset's terms before redistributing a model trained on it.
+
+sample_rate: 24000   # Mimi's rate (pocket_tts/config/*.yaml: mimi.sample_rate)
+min_sec: 1.0         # after silence trimming. Train clips under ~2 s have no prompt/target
+                     # cut (1 s each side) and are kept out of training by prepare.py.
+max_sec: 15.0        # = data.max_duration_sec in the training configs, so targets are never cropped
+loudness_db: -20.0   # active-speech level every clip is normalized to
+variant_prob: 0.2    # spelling augmentation for romanized-Hindi words
+test_frac: 0.02      # per source; whole speakers when a source has >= 20 of them
+valid_frac: 0.01     # trainer validation loss, clamped to [valid_min, valid_max] clips
+valid_min: 64
+valid_max: 300
+seed: 1234
+workers: 3            # shard workers (download + decode + resample + encode)
+
+sources:
+  # Real Hindi-English code-switching (spoken tutorials). 16 kHz audio, so it
+  # teaches *how* to switch languages; the 24-48 kHz sources teach acoustics.
+  - name: mucs
+    repo: dianavdavidson/MUCS-Hinglish
+    license: CC-BY-4.0
+    files: data/train-*.parquet
+    max_hours: 40
+    sample_frac: 0.55
+    text: [transcript]
+    speaker: speaker_id
+
+  # Enhanced, TTS-grade Hindi from thousands of speakers across India.
+  - name: ivr_hi
+    repo: SPRINGLab/IndicVoices-R_Hindi
+    license: CC-BY-4.0
+    files: data/train-*.parquet
+    max_shards: 5
+    max_hours: 35
+    text: [verbatim, text]
+    speaker: speaker_id
+    gender: gender
+    # Sampled distribution (200 rows): snr 40-74 dB (median 62), c50 32-60 (median 57),
+    # duration 1.7-21 s (median 8.8). These drop the noisiest ~5% and most reverberant ~10%.
+    filters:
+      snr: [">=", 45]
+      c50: [">=", 40]
+      cer: ["<=", 0.15]   # null in most rows (nulls pass)
+
+  # Studio Hindi, one male and one female voice.
+  - name: indictts_hi
+    repo: SPRINGLab/IndicTTS-Hindi
+    license: see dataset card (IIT Madras Indic TTS)
+    files: data/train-*.parquet
+    max_hours: 18
+    text: [text]
+    gender: gender
+    speaker_from_gender: true
+
+  # Studio Indian-accented English (speakers of many L1s).
+  - name: indictts_en
+    repo: SPRINGLab/IndicTTS-English
+    license: see dataset card (IIT Madras Indic TTS)
+    files: data/train-*.parquet
+    max_shards: 2
+    max_hours: 9
+    sample_frac: 0.65
+    text: [text]
+
+  # Indian-accented English from 117 speakers. Gated: accept the terms on the
+  # dataset page with the account whose HF_TOKEN the notebook uses.
+  - name: svarah
+    repo: ai4bharat/Svarah
+    license: CC-BY-4.0
+    files: data/*.parquet
+    max_hours: 9
+    text: [text, transcript, sentence]
+    speaker: speaker_id
+    gender: gender
+    optional: true

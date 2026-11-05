@@ -1,0 +1,93 @@
+[project]
+name = "hinglish-pocket-tts"
+version = "0.2.0"
+description = "Fine-tune Kyutai Pocket TTS for Indian Hinglish: romanized Hindi-English code-switching with an Indian accent."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    # Inference runtime (pure Python). Training uses Kyutai's training/ code from a
+    # pinned git checkout that the pipeline clones and patches (hinglish_tts/pocket_patch.py).
+    "pocket-tts==4.0.1",
+    "torch>=2.6",
+    "torchaudio>=2.6",       # MMS_FA forced aligner
+    "numpy>=2",
+    "pyyaml",
+    "soundfile",
+    "soxr",
+    "sphn>=0.1.4",
+    "safetensors",
+    "sentencepiece",
+    "tokenizers",
+    "einops",
+    "typer",
+    "pydantic>=2",
+    "huggingface_hub>=0.30",
+    "hf_xet",
+    "transformers>=4.45",
+    "pyarrow",
+    "jiwer",
+    "tqdm",
+    "scipy",
+    "whisper-normalizer",
+]
+
+# Pick exactly one PyTorch build: `uv sync --extra cpu` on a laptop, a CUDA build on
+# Kaggle (python -m hinglish_tts.kaggle_env chooses it from the driver and verifies it).
+[project.optional-dependencies]
+cpu = ["torch>=2.6", "torchaudio>=2.6"]
+cu126 = ["torch>=2.6", "torchaudio>=2.6"]
+cu128 = ["torch>=2.6", "torchaudio>=2.6"]
+cu130 = ["torch>=2.6", "torchaudio>=2.6"]
+
+[dependency-groups]
+dev = ["pytest", "pyflakes"]
+
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "cu126" }, { extra = "cu128" }, { extra = "cu130" }]]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu128", extra = "cu128" },
+    { index = "pytorch-cu130", extra = "cu130" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", extra = "cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu128", extra = "cu128" },
+    { index = "pytorch-cu130", extra = "cu130" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hinglish_tts"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

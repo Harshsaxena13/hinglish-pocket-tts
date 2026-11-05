@@ -1,0 +1,27 @@
+# Python / tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Secrets: tokens live in Kaggle secrets / `hf auth login`, never in the repo
+.env
+*.token
+
+# Artifacts (anchored to the repo root: hinglish_tts/data/ is source code)
+/data/
+/runs/
+/exports/
+/eval_out/
+/smoke/
+/out*.wav
+*.wav
+*.flac
+*.safetensors
+*.pt
+*.tar
+CLAUDE.md
+.claude/
